@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>希少体験おねだりリスト</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -192,6 +193,43 @@
         .restaurant-url:hover {
             text-decoration: underline;
         }
+
+        .qr-section {
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px solid #4ECDC4;
+            border-radius: 8px;
+            background: white;
+            text-align: center;
+        }
+
+        .qr-section h3 {
+            color: #4ECDC4;
+            margin-bottom: 15px;
+        }
+
+        #qrCodeContainer {
+            margin: 15px 0;
+        }
+
+        #qrCodeContainer canvas {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #downloadQrButton {
+            background-color: #4ECDC4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #downloadQrButton:hover {
+            background-color: #3db3aa;
+        }
     </style>
 </head>
 <body>
@@ -265,6 +303,12 @@
                         <input type="text" id="shareUrlInput" readonly>
                         <button id="copyButton">URLをコピー</button>
                     </div>
+                    
+                    <div id="qrCodeArea" class="qr-section" style="display: none;">
+                        <h3>QRコード</h3>
+                        <div id="qrCodeContainer"></div>
+                        <button id="downloadQrButton">QRコードをダウンロード</button>
+                    </div>
                 </div>
             `;
             setupCreateViewListeners();
@@ -277,6 +321,12 @@
                     <h1 id="ownerName"></h1>
                     <div id="restaurantList" class="restaurant-list"></div>
                     <button id="copyShareButton" class="secondary-button">URLをコピー</button>
+                    
+                    <div id="shareQrCodeArea" class="qr-section" style="display: none;">
+                        <h3>この画面のQRコード</h3>
+                        <div id="shareQrCodeContainer"></div>
+                        <button id="downloadShareQrButton">QRコードをダウンロード</button>
+                    </div>
                 </div>
             `;
             loadSharedData();
@@ -296,6 +346,12 @@
             const copyButton = document.getElementById('copyButton');
             if (copyButton) {
                 copyButton.addEventListener('click', copyToClipboard);
+            }
+            
+            // QRコードダウンロードボタン
+            const downloadQrButton = document.getElementById('downloadQrButton');
+            if (downloadQrButton) {
+                downloadQrButton.addEventListener('click', downloadQRCode);
             }
         }
 
@@ -361,6 +417,10 @@
             
             document.getElementById('shareUrlInput').value = shareUrl;
             document.getElementById('copyUrlArea').style.display = 'block';
+            
+            // QRコード生成
+            generateQRCode(shareUrl);
+            document.getElementById('qrCodeArea').style.display = 'block';
         }
 
         function clearInputs() {
@@ -415,6 +475,24 @@
                     document.execCommand('copy');
                     document.body.removeChild(input);
                     showSuccess('URLをコピーしました！');
+                });
+                
+                // 共有画面でもQRコードを表示
+                generateShareQRCode(window.location.href);
+                document.getElementById('shareQrCodeArea').style.display = 'block';
+                
+                // QRコードダウンロードボタン
+                document.getElementById('downloadShareQrButton').addEventListener('click', function() {
+                    const canvas = document.querySelector('#shareQrCodeContainer canvas');
+                    if (canvas) {
+                        const link = document.createElement('a');
+                        link.download = `shared-wishlist-qrcode-${new Date().getTime()}.png`;
+                        link.href = canvas.toDataURL();
+                        link.click();
+                        showSuccess('QRコードをダウンロードしました');
+                    } else {
+                        showError('QRコードが見つかりません');
+                    }
                 });
                 
             } catch (error) {
@@ -473,6 +551,63 @@
             input.select();
             document.execCommand('copy');
             showSuccess('URLをコピーしました！');
+        }
+
+        function generateQRCode(url) {
+            const qrContainer = document.getElementById('qrCodeContainer');
+            qrContainer.innerHTML = '';
+            
+            QRCode.toCanvas(qrContainer, url, {
+                width: 200,
+                height: 200,
+                margin: 2,
+                color: {
+                    dark: '#2C3E50',
+                    light: '#FFFFFF'
+                }
+            }, function (error) {
+                if (error) {
+                    console.error(error);
+                    showError('QRコードの生成に失敗しました');
+                } else {
+                    showSuccess('QRコードを生成しました');
+                }
+            });
+        }
+
+        function downloadQRCode() {
+            const canvas = document.querySelector('#qrCodeContainer canvas');
+            if (canvas) {
+                const link = document.createElement('a');
+                link.download = `wishlist-qrcode-${new Date().getTime()}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+                showSuccess('QRコードをダウンロードしました');
+            } else {
+                showError('QRコードが見つかりません');
+            }
+        }
+        
+        function generateShareQRCode(url) {
+            const qrContainer = document.getElementById('shareQrCodeContainer');
+            qrContainer.innerHTML = '';
+            
+            QRCode.toCanvas(qrContainer, url, {
+                width: 200,
+                height: 200,
+                margin: 2,
+                color: {
+                    dark: '#2C3E50',
+                    light: '#FFFFFF'
+                }
+            }, function (error) {
+                if (error) {
+                    console.error(error);
+                    showError('QRコードの生成に失敗しました');
+                } else {
+                    showSuccess('この画面のQRコードを生成しました');
+                }
+            });
         }
     </script>
 </body>
