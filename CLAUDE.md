@@ -1,5 +1,6 @@
 <language>Japanese</1anguage>
 <first_read_file>
+GitHub Pages代替ホスティング方法.md
 仕様書A,B.md
 </first_read_file>
 <character_code>UTF-8</character_code>

@@ -1,0 +1,24 @@
+{
+  "name": "wishlist-local-server",
+  "version": "1.0.0",
+  "description": "希少体験おねだりリスト - ローカルサーバー",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "python-server": "python3 -m http.server 8000"
+  },
+  "keywords": [
+    "wishlist",
+    "local-server",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
