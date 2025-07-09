@@ -203,6 +203,51 @@
             text-align: center;
         }
 
+        .network-share-section {
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px solid #FF6B6B;
+            border-radius: 8px;
+            background: white;
+            text-align: center;
+        }
+
+        .network-share-section h3 {
+            color: #FF6B6B;
+            margin-bottom: 15px;
+        }
+
+        .network-url {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        .network-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .network-buttons button {
+            background-color: #FF6B6B;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+            max-width: 150px;
+        }
+
+        .network-buttons button:hover {
+            background-color: #e55555;
+        }
+
         .qr-section h3 {
             color: #4ECDC4;
             margin-bottom: 15px;
@@ -245,6 +290,35 @@
         };
 
         let selectedFireLevel = 3;
+        let qrCodeLibraryLoaded = false;
+
+        // QRCodeライブラリの読み込み完了を待つ関数
+        function waitForQRCode() {
+            return new Promise((resolve, reject) => {
+                if (typeof QRCode !== 'undefined') {
+                    qrCodeLibraryLoaded = true;
+                    resolve();
+                    return;
+                }
+                
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒間待機
+                
+                const checkQRCode = () => {
+                    if (typeof QRCode !== 'undefined') {
+                        qrCodeLibraryLoaded = true;
+                        resolve();
+                    } else if (attempts < maxAttempts) {
+                        attempts++;
+                        setTimeout(checkQRCode, 100);
+                    } else {
+                        reject(new Error('QRCodeライブラリの読み込みに失敗しました'));
+                    }
+                };
+                
+                checkQRCode();
+            });
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
             const hash = window.location.hash;
@@ -304,6 +378,16 @@
                         <button id="copyButton">URLをコピー</button>
                     </div>
                     
+                    <div id="networkShareArea" class="network-share-section" style="display: none;">
+                        <h3>同一ネットワーク共有</h3>
+                        <div id="networkUrl" class="network-url"></div>
+                        <div class="network-buttons">
+                            <button id="copyNetworkUrlButton">URLをコピー</button>
+                            <button id="generateNetworkQrButton">QRコード生成</button>
+                        </div>
+                        <div id="networkQrCodeContainer" style="margin-top: 15px;"></div>
+                    </div>
+                    
                     <div id="qrCodeArea" class="qr-section" style="display: none;">
                         <h3>QRコード</h3>
                         <div id="qrCodeContainer"></div>
@@ -352,6 +436,17 @@
             const downloadQrButton = document.getElementById('downloadQrButton');
             if (downloadQrButton) {
                 downloadQrButton.addEventListener('click', downloadQRCode);
+            }
+
+            // ネットワーク共有ボタン
+            const copyNetworkUrlButton = document.getElementById('copyNetworkUrlButton');
+            if (copyNetworkUrlButton) {
+                copyNetworkUrlButton.addEventListener('click', copyNetworkUrl);
+            }
+
+            const generateNetworkQrButton = document.getElementById('generateNetworkQrButton');
+            if (generateNetworkQrButton) {
+                generateNetworkQrButton.addEventListener('click', generateNetworkQRCode);
             }
         }
 
@@ -418,9 +513,17 @@
             document.getElementById('shareUrlInput').value = shareUrl;
             document.getElementById('copyUrlArea').style.display = 'block';
             
-            // QRコード生成
-            generateQRCode(shareUrl);
-            document.getElementById('qrCodeArea').style.display = 'block';
+            // QRコード生成（エラーでもページは残す）
+            try {
+                generateQRCode(shareUrl);
+                document.getElementById('qrCodeArea').style.display = 'block';
+            } catch (error) {
+                console.error('QRコード生成エラー:', error);
+                // エラーが出てもページは残す
+            }
+            
+            // ネットワーク共有URL生成
+            generateNetworkShareUrl(shareUrl);
         }
 
         function clearInputs() {
@@ -447,25 +550,47 @@
                 if (!encoded) throw new Error('データがありません');
                 
                 const data = decodeListData(encoded);
-                if (!data || !data.owner || !data.restaurants) throw new Error('不正なデータです');
+                if (!data) throw new Error('データの復号に失敗しました');
                 
-                document.getElementById('ownerName').textContent = `${data.owner}さんの行きたいお店リスト`;
+                // データの正規化（欠損データを補完）
+                const normalizedData = {
+                    owner: data.owner || '名無しさん',
+                    restaurants: Array.isArray(data.restaurants) ? data.restaurants : [],
+                    createdAt: data.createdAt || new Date().toISOString()
+                };
+                
+                // 空のリストの場合も表示を継続
+                document.getElementById('ownerName').textContent = `${normalizedData.owner}さんの行きたいお店リスト`;
                 
                 const listContainer = document.getElementById('restaurantList');
                 listContainer.innerHTML = '';
                 
-                data.restaurants.forEach(restaurant => {
-                    const item = document.createElement('div');
-                    item.className = 'restaurant-item';
-                    item.innerHTML = `
-                        <div>
-                            <span class="fire-level">${'🔥'.repeat(restaurant.fireLevel)}</span>
-                            <span class="restaurant-name">${escapeHtml(restaurant.name)}</span>
-                            ${restaurant.url ? `<a href="${restaurant.url}" class="restaurant-url" target="_blank">🔗</a>` : ''}
-                        </div>
-                    `;
-                    listContainer.appendChild(item);
-                });
+                if (normalizedData.restaurants.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'restaurant-item';
+                    emptyMessage.innerHTML = '<div>まだお店が登録されていません</div>';
+                    listContainer.appendChild(emptyMessage);
+                } else {
+                    normalizedData.restaurants.forEach(restaurant => {
+                        // レストランデータの正規化
+                        const normalizedRestaurant = {
+                            name: restaurant.name || '名前なし',
+                            fireLevel: restaurant.fireLevel || 3,
+                            url: restaurant.url || ''
+                        };
+                        
+                        const item = document.createElement('div');
+                        item.className = 'restaurant-item';
+                        item.innerHTML = `
+                            <div>
+                                <span class="fire-level">${'🔥'.repeat(normalizedRestaurant.fireLevel)}</span>
+                                <span class="restaurant-name">${escapeHtml(normalizedRestaurant.name)}</span>
+                                ${normalizedRestaurant.url ? `<a href="${normalizedRestaurant.url}" class="restaurant-url" target="_blank">🔗</a>` : ''}
+                            </div>
+                        `;
+                        listContainer.appendChild(item);
+                    });
+                }
 
                 document.getElementById('copyShareButton').addEventListener('click', function() {
                     const input = document.createElement('input');
@@ -477,9 +602,14 @@
                     showSuccess('URLをコピーしました！');
                 });
                 
-                // 共有画面でもQRコードを表示
-                generateShareQRCode(window.location.href);
-                document.getElementById('shareQrCodeArea').style.display = 'block';
+                // 共有画面でもQRコードを表示（エラーでもページは残す）
+                try {
+                    generateShareQRCode(window.location.href);
+                    document.getElementById('shareQrCodeArea').style.display = 'block';
+                } catch (error) {
+                    console.error('QRコード生成エラー:', error);
+                    // エラーが出てもページは残す
+                }
                 
                 // QRコードダウンロードボタン
                 document.getElementById('downloadShareQrButton').addEventListener('click', function() {
@@ -496,10 +626,11 @@
                 });
                 
             } catch (error) {
-                showError('リストの読み込みに失敗しました');
+                console.error('データ読み込みエラー:', error);
+                showError('リストの読み込みに失敗しました: ' + error.message);
                 setTimeout(() => {
                     window.location.hash = '#create';
-                }, 2000);
+                }, 3000);
             }
         }
 
@@ -553,26 +684,35 @@
             showSuccess('URLをコピーしました！');
         }
 
-        function generateQRCode(url) {
+        async function generateQRCode(url) {
             const qrContainer = document.getElementById('qrCodeContainer');
             qrContainer.innerHTML = '';
             
-            QRCode.toCanvas(qrContainer, url, {
-                width: 200,
-                height: 200,
-                margin: 2,
-                color: {
-                    dark: '#2C3E50',
-                    light: '#FFFFFF'
-                }
-            }, function (error) {
-                if (error) {
-                    console.error(error);
-                    showError('QRコードの生成に失敗しました');
-                } else {
-                    showSuccess('QRコードを生成しました');
-                }
-            });
+            try {
+                await waitForQRCode();
+                
+                QRCode.toCanvas(qrContainer, url, {
+                    width: 200,
+                    height: 200,
+                    margin: 2,
+                    color: {
+                        dark: '#2C3E50',
+                        light: '#FFFFFF'
+                    }
+                }, function (error) {
+                    if (error) {
+                        console.error(error);
+                        showError('QRコードの生成に失敗しました');
+                    } else {
+                        showSuccess('QRコードを生成しました');
+                    }
+                });
+            } catch (error) {
+                console.error('QRコードライブラリエラー:', error);
+                showError('QRコードライブラリの読み込みに失敗しました');
+                // QRコードエリアにエラーメッセージを表示
+                qrContainer.innerHTML = '<p style="text-align: center; color: #ff4444;">QRコードを生成できませんでした</p>';
+            }
         }
 
         function downloadQRCode() {
@@ -588,26 +728,113 @@
             }
         }
         
-        function generateShareQRCode(url) {
+        async function generateShareQRCode(url) {
             const qrContainer = document.getElementById('shareQrCodeContainer');
             qrContainer.innerHTML = '';
             
-            QRCode.toCanvas(qrContainer, url, {
-                width: 200,
-                height: 200,
-                margin: 2,
-                color: {
-                    dark: '#2C3E50',
-                    light: '#FFFFFF'
-                }
-            }, function (error) {
-                if (error) {
-                    console.error(error);
-                    showError('QRコードの生成に失敗しました');
-                } else {
-                    showSuccess('この画面のQRコードを生成しました');
-                }
-            });
+            try {
+                await waitForQRCode();
+                
+                QRCode.toCanvas(qrContainer, url, {
+                    width: 200,
+                    height: 200,
+                    margin: 2,
+                    color: {
+                        dark: '#2C3E50',
+                        light: '#FFFFFF'
+                    }
+                }, function (error) {
+                    if (error) {
+                        console.error(error);
+                        showError('QRコードの生成に失敗しました');
+                    } else {
+                        showSuccess('この画面のQRコードを生成しました');
+                    }
+                });
+            } catch (error) {
+                console.error('QRコードライブラリエラー:', error);
+                showError('QRコードライブラリの読み込みに失敗しました');
+                // QRコードエリアにエラーメッセージを表示
+                qrContainer.innerHTML = '<p style="text-align: center; color: #ff4444;">QRコードを生成できませんでした</p>';
+            }
+        }
+        
+        async function generateNetworkShareUrl(shareUrl) {
+            try {
+                // サーバーからネットワーク情報を取得
+                const response = await fetch('/api/qr');
+                const data = await response.json();
+                
+                // shareUrlのパスとハッシュを抽出
+                const urlObj = new URL(shareUrl);
+                const pathAndHash = urlObj.pathname + urlObj.hash;
+                
+                // ネットワークURLを構築
+                const networkUrl = data.url + pathAndHash;
+                
+                // URLを表示
+                document.getElementById('networkUrl').textContent = networkUrl;
+                document.getElementById('networkShareArea').style.display = 'block';
+                
+                // グローバル変数に保存（他の関数で使用）
+                window.currentNetworkUrl = networkUrl;
+                
+            } catch (error) {
+                console.error('ネットワーク共有URL生成エラー:', error);
+                showError('ネットワーク共有URLの生成に失敗しました');
+            }
+        }
+        
+        function copyNetworkUrl() {
+            const networkUrl = window.currentNetworkUrl;
+            if (networkUrl) {
+                const input = document.createElement('input');
+                input.value = networkUrl;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showSuccess('ネットワーク共有URLをコピーしました！');
+            } else {
+                showError('共有URLがまだ生成されていません');
+            }
+        }
+        
+        async function generateNetworkQRCode() {
+            const networkUrl = window.currentNetworkUrl;
+            if (!networkUrl) {
+                showError('共有URLがまだ生成されていません');
+                return;
+            }
+            
+            const qrContainer = document.getElementById('networkQrCodeContainer');
+            qrContainer.innerHTML = '';
+            
+            try {
+                await waitForQRCode();
+                
+                QRCode.toCanvas(qrContainer, networkUrl, {
+                    width: 200,
+                    height: 200,
+                    margin: 2,
+                    color: {
+                        dark: '#FF6B6B',
+                        light: '#FFFFFF'
+                    }
+                }, function (error) {
+                    if (error) {
+                        console.error(error);
+                        showError('ネットワーク共有QRコードの生成に失敗しました');
+                    } else {
+                        showSuccess('ネットワーク共有QRコードを生成しました');
+                    }
+                });
+            } catch (error) {
+                console.error('QRコードライブラリエラー:', error);
+                showError('QRコードライブラリの読み込みに失敗しました');
+                // QRコードエリアにエラーメッセージを表示
+                qrContainer.innerHTML = '<p style="text-align: center; color: #ff4444;">QRコードを生成できませんでした</p>';
+            }
         }
     </script>
 </body>

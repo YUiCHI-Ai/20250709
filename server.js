@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const os = require('os');
+const qrcode = require('qrcode');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -32,6 +33,29 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// QRコード生成エンドポイント
+app.get('/api/qr', async (req, res) => {
+    try {
+        const localIP = getLocalIpAddress();
+        const url = `http://${localIP}:${PORT}`;
+        const qrCodeDataURL = await qrcode.toDataURL(url, {
+            width: 256,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+            }
+        });
+        res.json({
+            url: url,
+            qrCode: qrCodeDataURL,
+            message: '同一ネットワークの他の端末からアクセスできます'
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'QRコード生成に失敗しました' });
+    }
+});
+
 // IPアドレス取得関数
 function getLocalIpAddress() {
     const interfaces = os.networkInterfaces();
@@ -47,13 +71,22 @@ function getLocalIpAddress() {
 }
 
 // サーバー起動
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     const localIP = getLocalIpAddress();
     console.log('🚀 希少体験おねだりリスト サーバーが起動しました！');
     console.log('');
     console.log('📍 アクセス方法:');
     console.log(`   ローカル: http://localhost:${PORT}`);
     console.log(`   同一ネットワーク: http://${localIP}:${PORT}`);
+    console.log('');
+    console.log('💡 他の端末からのアクセス方法:');
+    console.log(`   1. 同一Wi-Fiネットワークに接続`);
+    console.log(`   2. ブラウザで http://${localIP}:${PORT} にアクセス`);
+    console.log(`   3. QRコード: http://${localIP}:${PORT}/api/qr`);
+    console.log('');
+    console.log('🔧 ファイアウォール設定:');
+    console.log('   macOS: システム環境設定 > セキュリティとプライバシー > ファイアウォール');
+    console.log(`   ポート ${PORT} の受信接続を許可してください`);
     console.log('');
     console.log('🛑 サーバーを停止するには: Ctrl+C');
     console.log('');
